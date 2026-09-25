@@ -1,0 +1,13 @@
+{
+  "name": "zoko-v2",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "run:client": "pnpm --filter @zoko/client dev",
+    "run:server": "pnpm --filter @zoko/server dev",
+    "build:client": "pnpm --filter @zoko/client build",
+    "build:server": "pnpm --filter @zoko/server build",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
