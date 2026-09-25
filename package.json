@@ -8,6 +8,8 @@
     "build:client": "pnpm --filter @zoko/client build",
     "build:server": "pnpm --filter @zoko/server build",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "db:up": "docker compose --env-file apps/server/.env up -d",
+    "db:down": "docker compose --env-file apps/server/.env down"
   }
 }
