@@ -7,6 +7,7 @@ import { Conversation } from './entities/conversation.entity.js'
 import { Customer } from './entities/customer.entity.js'
 import { Message } from './entities/message.entity.js'
 import { CreateSupportEntities1790421158000 } from './migrations/1790421158000-create-support-entities.js'
+import { AddMessageHistorySyncedAt1790468449000 } from './migrations/1790468449000-add-message-history-synced-at.js'
 
 export const database = new DataSource({
   type: 'postgres',
@@ -18,5 +19,8 @@ export const database = new DataSource({
   logging: config.database.logging,
   synchronize: false,
   entities: [Customer, Agent, Conversation, Message, ChatAssignment],
-  migrations: [CreateSupportEntities1790421158000],
+  migrations: [
+    CreateSupportEntities1790421158000,
+    AddMessageHistorySyncedAt1790468449000,
+  ],
 })

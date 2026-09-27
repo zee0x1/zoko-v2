@@ -12,4 +12,9 @@ export const config = {
     password: process.env.DB_PASSWORD,
     logging: process.env.DB_LOGGING === "true",
   },
+  zoko: {
+    apiKey: process.env.ZOKO_API_KEY,
+    baseUrl: "https://chat.zoko.io/v2",
+    requestDelayMs: 5000,
+  },
 } as const;

@@ -21,6 +21,9 @@ export class Customer {
   @Column({ type: 'varchar', length: 32 })
   phone: string
 
+  @Column({ name: 'message_history_synced_at', type: 'timestamptz', nullable: true })
+  messageHistorySyncedAt: Date | null
+
   @OneToMany(() => Conversation, (conversation) => conversation.customer)
   conversations: Relation<Conversation[]>
 
