@@ -15,6 +15,6 @@ export const config = {
   zoko: {
     apiKey: process.env.ZOKO_API_KEY,
     baseUrl: "https://chat.zoko.io/v2",
-    requestDelayMs: 5000,
+    requestDelayMs: 3000,
   },
 } as const;

@@ -3,6 +3,7 @@ import { Agent } from "../entities/agent.entity.js";
 import { Message, MessageDirection } from "../entities/message.entity.js";
 import { Customer } from "../entities/customer.entity.js";
 import { ZokoClient } from "../zoko-client.js";
+import { SyncCheckpoint } from "../entities/sync-checkpoint.entity.js";
 
 export class SyncService {
   constructor(
@@ -29,39 +30,71 @@ export class SyncService {
     return { synced: agents.length };
   }
 
-  async syncCustomers(): Promise<{ synced: number }> {
-    let customersSynced = 0;
-    let page = 1;
+  async syncCustomers(): Promise<{
+    synced: number;
+    page: number;
+    nextPage: number;
+    totalPages: number;
+  }> {
+    const checkpointKey = "zoko_customers";
+    const checkpointRepository = this.database.getRepository(SyncCheckpoint);
 
-    while (true) {
-      const customerPage = await this.zokoClient.listCustomers(page);
+    const checkpoint = await checkpointRepository.findOneBy({
+      key: checkpointKey,
+    });
 
-      await this.database.transaction(async (manager) => {
-        for (const customer of customerPage.customers) {
-          const channelId = customer.channelId.trim();
-          const phone = channelId.startsWith("+") ? channelId : `+${channelId}`;
-
-          await manager.getRepository(Customer).upsert(
-            {
-              id: customer.id,
-              name: customer.name,
-              phone,
-            },
-            ["id"],
-          );
-        }
-      });
-
-      customersSynced += customerPage.customers.length;
-
-      if (customerPage.currentPage >= customerPage.totalPages) {
-        break;
-      }
-
-      page = customerPage.currentPage + 1;
+    if (!checkpoint) {
+      console.error("Checkpoint not found. Stopping sync");
+      return { synced: 0, page: 0, nextPage: 0, totalPages: 0 };
     }
 
-    return { synced: customersSynced };
+    const response = await this.zokoClient.listCustomers(checkpoint.nextPage);
+
+    if (response.currentPage >= response.totalPages) {
+      console.info("Sync completed all the pages");
+      return {
+        synced: response.customers.length,
+        page: response.currentPage,
+        nextPage: response.currentPage,
+        totalPages: response.totalPages,
+      };
+    }
+
+    const nextPage = response.currentPage + 1;
+
+    await this.database.transaction(async (manager) => {
+      const customerRepository = this.database.getRepository(Customer);
+
+      for (const customer of response.customers) {
+        const channelId = customer.channelId.trim();
+        const phone = channelId.startsWith("+") ? channelId : `+${channelId}`;
+
+        await customerRepository.upsert(
+          {
+            id: customer.id,
+            phone: phone,
+            name: customer.name,
+          },
+          ["id"],
+        );
+      }
+
+      await manager.getRepository(SyncCheckpoint).update(
+        {
+          key: checkpointKey,
+        },
+        {
+          nextPage: nextPage,
+        },
+      );
+    });
+
+    return {
+      synced: response.customers.length,
+      page: response.currentPage,
+      nextPage,
+      totalPages: response.totalPages,
+    };
   }
 
   async syncCustomerMessages(): Promise<{
@@ -109,10 +142,9 @@ export class SyncService {
           synced += 1;
         }
 
-        await manager.getRepository(Customer).update(
-          { id: customer.id },
-          { messageHistorySyncedAt: new Date() },
-        );
+        await manager
+          .getRepository(Customer)
+          .update({ id: customer.id }, { messageHistorySyncedAt: new Date() });
 
         return synced;
       });

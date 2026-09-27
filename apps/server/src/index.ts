@@ -1,5 +1,6 @@
-import { app } from "./app.js";
+import { app, syncService } from "./app.js";
 import { database } from "./database.js";
+import { startSyncJob } from "./jobs/sync.job.js";
 
 async function startServer(): Promise<void> {
   try {
@@ -13,12 +14,16 @@ async function startServer(): Promise<void> {
     return;
   }
 
+  const syncTask = startSyncJob(syncService);
+  console.info("Customer sync Job registered");
+
   const server = app.listen(8000, () => {
     console.info(`Server listening at port 8000`);
   });
 
   function shutdown(): void {
     console.info("Shutting down server...");
+    syncTask.stop();
     server.close(async () => {
       await database.destroy();
       console.info("Server shut down.");

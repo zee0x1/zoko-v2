@@ -17,9 +17,9 @@ const zokoClient = new ZokoClient(
   config.zoko.apiKey,
   config.zoko.requestDelayMs,
 );
-const syncController = new SyncController(
-  new SyncService(database, zokoClient),
-);
+
+export const syncService = new SyncService(database, zokoClient);
+const syncController = new SyncController(syncService);
 const webhookController = new WebhookController(new WebhookService(database));
 
 app.get("/health", (_request, response) => {
