@@ -37,6 +37,19 @@ export interface ZokoMessage {
   deliveryStatus?: string | null;
 }
 
+export interface ZokoSendMessageResponse {
+  status: string;
+  statusText: string;
+  messageId: string;
+}
+
+export class ZokoApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ZokoApiError";
+  }
+}
+
 export class ZokoClient {
   constructor(
     private readonly baseUrl: string,
@@ -62,7 +75,25 @@ export class ZokoClient {
     );
   }
 
-  private async request<T>(path: string): Promise<T> {
+  async sendTextMessage(
+    recipient: string,
+    message: string,
+  ): Promise<ZokoSendMessageResponse> {
+    return this.request<ZokoSendMessageResponse>("message", {
+      method: "POST",
+      body: {
+        channel: "whatsapp",
+        recipient,
+        type: "text",
+        message,
+      },
+    });
+  }
+
+  private async request<T>(
+    path: string,
+    options: { method?: "GET" | "POST"; body?: unknown } = {},
+  ): Promise<T> {
     if (!this.apiKey) {
       throw new Error("ZOKO_API_KEY is required for Zoko operations");
     }
@@ -75,17 +106,32 @@ export class ZokoClient {
     this.lastRequestAt = Date.now();
 
     const url = `${this.baseUrl}/${path}`;
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      apikey: this.apiKey,
+    };
+
+    if (options.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
+
     const response = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        apikey: this.apiKey,
-      },
+      method: options.method ?? "GET",
+      headers,
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
     });
 
     if (!response.ok) {
-      throw new Error(`Zoko request failed with status ${response.status}`);
+      throw new ZokoApiError(
+        `Zoko request failed with status ${response.status}`,
+      );
     }
 
-    return (await response.json()) as T;
+    try {
+      return (await response.json()) as T;
+    } catch {
+      throw new ZokoApiError("Zoko returned invalid JSON");
+    }
   }
 }

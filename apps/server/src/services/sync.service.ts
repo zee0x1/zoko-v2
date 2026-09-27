@@ -48,19 +48,19 @@ export class SyncService {
       return { synced: 0, page: 0, nextPage: 0, totalPages: 0 };
     }
 
-    const response = await this.zokoClient.listCustomers(
-      Math.abs(checkpoint.nextPage),
-    );
-
     if (checkpoint.nextPage === -1) {
       console.info("Sync completed all the pages");
       return {
-        synced: response.customers.length,
-        page: response.currentPage,
-        nextPage: response.currentPage,
-        totalPages: response.totalPages,
+        synced: 0,
+        page: -1,
+        nextPage: -1,
+        totalPages: -1,
       };
     }
+
+    const response = await this.zokoClient.listCustomers(
+      Math.abs(checkpoint.nextPage),
+    );
 
     const nextPage =
       response.currentPage === response.totalPages

@@ -14,6 +14,7 @@ export const config = {
   },
   zoko: {
     apiKey: process.env.ZOKO_API_KEY,
+    allowedRecipientPhone: process.env.ZOKO_ALLOWED_RECIPIENT_PHONE,
     baseUrl: "https://chat.zoko.io/v2",
     requestDelayMs: 3000,
   },
