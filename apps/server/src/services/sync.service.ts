@@ -48,9 +48,11 @@ export class SyncService {
       return { synced: 0, page: 0, nextPage: 0, totalPages: 0 };
     }
 
-    const response = await this.zokoClient.listCustomers(checkpoint.nextPage);
+    const response = await this.zokoClient.listCustomers(
+      Math.abs(checkpoint.nextPage),
+    );
 
-    if (response.currentPage >= response.totalPages) {
+    if (checkpoint.nextPage === -1) {
       console.info("Sync completed all the pages");
       return {
         synced: response.customers.length,
@@ -60,7 +62,10 @@ export class SyncService {
       };
     }
 
-    const nextPage = response.currentPage + 1;
+    const nextPage =
+      response.currentPage === response.totalPages
+        ? -1
+        : response.currentPage + 1;
 
     await this.database.transaction(async (manager) => {
       const customerRepository = this.database.getRepository(Customer);

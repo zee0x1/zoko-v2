@@ -1,8 +1,10 @@
 import express from "express";
+import { MetricsController } from "./controllers/metrics.controller.js";
 import { SyncController } from "./controllers/sync.controller.js";
 import { WebhookController } from "./controllers/webhook.controller.js";
 import { config } from "./config.js";
 import { database } from "./database.js";
+import { MetricsService } from "./services/metrics.service.js";
 import { SyncService } from "./services/sync.service.js";
 import { WebhookService } from "./services/webhook.service.js";
 import { ZokoClient } from "./zoko-client.js";
@@ -20,6 +22,7 @@ const zokoClient = new ZokoClient(
 
 export const syncService = new SyncService(database, zokoClient);
 const syncController = new SyncController(syncService);
+const metricsController = new MetricsController(new MetricsService(database));
 const webhookController = new WebhookController(new WebhookService(database));
 
 app.get("/health", (_request, response) => {
@@ -37,5 +40,22 @@ app.post(
 app.post(
   "/api/ingestion/sync/customer-messages",
   syncController.syncCustomerMessages.bind(syncController),
+);
+app.get(
+  "/api/metrics/messages/total",
+  metricsController.getTotalMessages.bind(metricsController),
+);
+app.get(
+  "/api/metrics/messages/by-customer",
+  metricsController.getMessagesByCustomer.bind(metricsController),
+);
+app.get("/api/metrics/frt", metricsController.getFRT.bind(metricsController));
+app.get(
+  "/api/metrics/resolution",
+  metricsController.getResolutionTime.bind(metricsController),
+);
+app.get(
+  "/api/metrics/agents",
+  metricsController.getAgentMetrics.bind(metricsController),
 );
 app.post("/webhooks/zoko", webhookController.receive.bind(webhookController));

@@ -10,6 +10,7 @@ import { SyncCheckpoint } from './entities/sync-checkpoint.entity.js'
 import { CreateSupportEntities1790421158000 } from './migrations/1790421158000-create-support-entities.js'
 import { AddMessageHistorySyncedAt1790468449000 } from './migrations/1790468449000-add-message-history-synced-at.js'
 import { CreateSyncCheckpoints1790507306000 } from './migrations/1790507306000-create-sync-checkpoints.js'
+import { RemoveSyncCheckpointNextPageConstraint1790516167000 } from './migrations/1790516167000-remove-sync-checkpoint-next-page-constraint.js'
 
 export const database = new DataSource({
   type: 'postgres',
@@ -32,5 +33,6 @@ export const database = new DataSource({
     CreateSupportEntities1790421158000,
     AddMessageHistorySyncedAt1790468449000,
     CreateSyncCheckpoints1790507306000,
+    RemoveSyncCheckpointNextPageConstraint1790516167000,
   ],
 })
