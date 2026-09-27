@@ -48,33 +48,64 @@ export class MetricsService {
     return { totalMessages };
   }
 
-  async getMessagesByCustomer(): Promise<{
+  async getMessagesByCustomer(
+    page: number,
+    pageSize: number,
+  ): Promise<{
     customers: Array<{
       customerId: string;
       customerName: string;
       phone: string;
       messageCount: number;
     }>;
+    pagination: {
+      page: number;
+      pageSize: number;
+      totalItems: number;
+      totalPages: number;
+    };
+    maxMessageCount: number;
   }> {
-    const rows = await this.database.query<
-      Array<{
-        customerId: string;
-        customerName: string;
-        phone: string;
-        messageCount: string;
-      }>
-    >(`
-      SELECT
-        customer.id AS "customerId",
-        customer.name AS "customerName",
-        customer.phone AS "phone",
-        COUNT(message.id) AS "messageCount"
-      FROM "messages" AS message
-      INNER JOIN "customers" AS customer
-        ON customer.id = message.customer_id
-      GROUP BY customer.id, customer.name, customer.phone
-      ORDER BY COUNT(message.id) DESC, customer.id ASC
-    `);
+    const offset = (page - 1) * pageSize;
+    const [rows, countRows] = await Promise.all([
+      this.database.query<
+        Array<{
+          customerId: string;
+          customerName: string;
+          phone: string;
+          messageCount: string;
+        }>
+      >(
+        `
+          SELECT
+            customer.id AS "customerId",
+            customer.name AS "customerName",
+            customer.phone AS "phone",
+            COUNT(message.id) AS "messageCount"
+          FROM "messages" AS message
+          INNER JOIN "customers" AS customer
+            ON customer.id = message.customer_id
+          GROUP BY customer.id, customer.name, customer.phone
+          ORDER BY COUNT(message.id) DESC, customer.id ASC
+          LIMIT $1 OFFSET $2
+        `,
+        [pageSize, offset],
+      ),
+      this.database.query<
+        Array<{ totalItems: string; maxMessageCount: string }>
+      >(`
+        WITH customer_counts AS (
+          SELECT count(*) as message_count
+          FROM "messages"
+          GROUP BY customer_id
+        )
+        SELECT count(*) as "totalItems",
+              coalesce(max(customer_counts.message_count), 0) as "maxMessageCount"
+        FROM customer_counts
+      `),
+    ]);
+    const totalItems = Number(countRows[0]?.totalItems ?? 0);
+    const maxMessageCount = Number(countRows[0]?.maxMessageCount ?? 0);
 
     return {
       customers: rows.map((row) => ({
@@ -83,6 +114,13 @@ export class MetricsService {
         phone: row.phone,
         messageCount: Number(row.messageCount),
       })),
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize),
+      },
+      maxMessageCount,
     };
   }
 

@@ -1,18 +1,30 @@
+import { Outlet } from "@tanstack/react-router"
+import { AppSidebar } from "@/components/layout/app-sidebar"
+import { Toaster } from "@/components/ui/sonner"
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
+import { TooltipProvider } from "@/components/ui/tooltip"
+
 function App() {
   return (
-    <main className="grid min-h-screen place-items-center bg-slate-950 px-6 text-slate-100">
-      <section className="max-w-xl text-center">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.25em] text-cyan-400">
-          Zoko
-        </p>
-        <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-          Client is ready.
-        </h1>
-        <p className="mt-5 text-lg leading-8 text-slate-400">
-          Vite, React, TypeScript, and Tailwind CSS are configured.
-        </p>
-      </section>
-    </main>
+    <TooltipProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-card px-3 md:hidden">
+            <SidebarTrigger />
+            <span className="text-sm font-semibold">Zoko SI</span>
+          </header>
+          <main className="flex min-h-0 flex-1 flex-col bg-background">
+            <Outlet />
+          </main>
+        </SidebarInset>
+        <Toaster theme="light" />
+      </SidebarProvider>
+    </TooltipProvider>
   )
 }
 

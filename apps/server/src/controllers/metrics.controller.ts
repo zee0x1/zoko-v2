@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { messagesByCustomerPaginationSchema } from "../dtos/metrics.dto.js";
 import type { MetricsService } from "../services/metrics.service.js";
 
 export class MetricsController {
@@ -16,9 +17,23 @@ export class MetricsController {
     }
   }
 
-  async getMessagesByCustomer(_req: Request, res: Response): Promise<void> {
+  async getMessagesByCustomer(req: Request, res: Response): Promise<void> {
+    const pagination = messagesByCustomerPaginationSchema.safeParse(req.query);
+
+    if (!pagination.success) {
+      res.status(400).json({ error: "Invalid pagination parameters" });
+      return;
+    }
+
     try {
-      res.status(200).json(await this.metricsService.getMessagesByCustomer());
+      res
+        .status(200)
+        .json(
+          await this.metricsService.getMessagesByCustomer(
+            pagination.data.page,
+            pagination.data.pageSize,
+          ),
+        );
     } catch (error) {
       console.error("Messages by customer metrics failed", error);
       res.status(500).json({
