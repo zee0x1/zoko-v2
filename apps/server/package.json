@@ -7,7 +7,8 @@
     "dev": "nodemon",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "posthog:sync-messages": "tsx src/scripts/sync-msg-to-posthog.ts"
   },
   "dependencies": {
     "dotenv": "^18.0.3",

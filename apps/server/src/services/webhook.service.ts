@@ -12,6 +12,7 @@ import { ChatAssignment } from "../entities/chat-assignment.entity.js";
 import { Conversation } from "../entities/conversation.entity.js";
 import { Customer } from "../entities/customer.entity.js";
 import { Message, MessageDirection } from "../entities/message.entity.js";
+import { PostHogService, type MessageEventParams } from "./posthog.service.js";
 
 type WebhookAgent = {
   id: string;
@@ -20,7 +21,10 @@ type WebhookAgent = {
 };
 
 export class WebhookService {
-  constructor(private readonly database: DataSource) {}
+  constructor(
+    private readonly database: DataSource,
+    private readonly postHogService: PostHogService,
+  ) {}
 
   process(payload: WebhookDto): Promise<void> {
     switch (payload.event) {
@@ -40,46 +44,68 @@ export class WebhookService {
   private async processIncomingMessage(
     payload: IncomingMessageDto,
   ): Promise<void> {
-    await this.database.transaction(async (manager) => {
-      await this.upsertCustomer(
-        manager,
-        payload.customer.id,
-        payload.customer.name,
-        payload.phone,
-      );
-      await this.lockCustomer(manager, payload.customer.id);
-
-      const conversations = manager.getRepository(Conversation);
-      let conversation = await this.findOpenConversation(
-        manager,
-        payload.customer.id,
-      );
-
-      if (!conversation) {
-        conversation = await conversations.save(
-          conversations.create({
-            customerId: payload.customer.id,
-            openedAt: payload.platformTimestamp,
-            closedAt: null,
-            closedByAgentId: null,
-          }),
+    const transactionResult = await this.database.transaction(
+      async (manager) => {
+        await this.upsertCustomer(
+          manager,
+          payload.customer.id,
+          payload.customer.name,
+          payload.phone,
         );
-      }
+        await this.lockCustomer(manager, payload.customer.id);
 
-      await this.upsertLiveMessage(
-        manager,
-        payload,
-        conversation.id,
-        null,
-        MessageDirection.FromCustomer,
-      );
-    });
+        const conversations = manager.getRepository(Conversation);
+        let conversation = await this.findOpenConversation(
+          manager,
+          payload.customer.id,
+        );
+
+        let createdConversation: {
+          conversationId: number;
+          customerId: string;
+        } | null = null;
+
+        if (!conversation) {
+          conversation = await conversations.save(
+            conversations.create({
+              customerId: payload.customer.id,
+              openedAt: payload.platformTimestamp,
+              closedAt: null,
+              closedByAgentId: null,
+            }),
+          );
+          createdConversation = {
+            conversationId: conversation.id,
+            customerId: conversation.customerId,
+          };
+        }
+
+        const createdMessage = await this.upsertLiveMessage(
+          manager,
+          payload,
+          conversation.id,
+          null,
+          MessageDirection.FromCustomer,
+        );
+
+        return { createdConversation, createdMessage };
+      },
+    );
+
+    if (transactionResult.createdConversation) {
+      this.postHogService.captureConversationOpened({
+        ...transactionResult.createdConversation,
+        sourceEvent: payload.event,
+      });
+    }
+
+    this.postHogService.captureMessages(transactionResult.createdMessage);
   }
 
   private async processOutgoingMessage(
     payload: OutgoingMessageDto,
   ): Promise<void> {
-    await this.database.transaction(async (manager) => {
+    const createdMessage = await this.database.transaction(async (manager) => {
       await this.upsertCustomer(
         manager,
         payload.customer.id,
@@ -108,7 +134,7 @@ export class WebhookService {
         }
       }
 
-      await this.upsertLiveMessage(
+      return this.upsertLiveMessage(
         manager,
         payload,
         conversation?.id ?? null,
@@ -116,6 +142,8 @@ export class WebhookService {
         MessageDirection.FromStore,
       );
     });
+
+    this.postHogService.captureMessages(createdMessage);
   }
 
   private async processDeliveryUpdate(
@@ -137,7 +165,7 @@ export class WebhookService {
   }
 
   private async processChatAssigned(payload: ChatAssignedDto): Promise<void> {
-    await this.database.transaction(async (manager) => {
+    const conversation = await this.database.transaction(async (manager) => {
       const customer = await manager
         .getRepository(Customer)
         .findOneBy({ id: payload.customerId });
@@ -157,6 +185,10 @@ export class WebhookService {
         manager,
         payload.customerId,
       );
+      let createdConversation: {
+        conversationId: number;
+        customerId: string;
+      } | null = null;
 
       if (!conversation) {
         conversation = await conversations.save(
@@ -167,6 +199,10 @@ export class WebhookService {
             closedByAgentId: null,
           }),
         );
+        createdConversation = {
+          conversationId: conversation.id,
+          customerId: conversation.customerId,
+        };
       }
 
       const latestAssignment = await manager
@@ -177,7 +213,7 @@ export class WebhookService {
         });
 
       if (latestAssignment?.agentId === payload.agent.id) {
-        return;
+        return createdConversation;
       }
 
       await manager.getRepository(ChatAssignment).insert({
@@ -185,55 +221,76 @@ export class WebhookService {
         agentId: payload.agent.id,
         assignedAt: payload.eventAt,
       });
+
+      return createdConversation;
     });
+
+    if (conversation) {
+      this.postHogService.captureConversationOpened({
+        ...conversation,
+        sourceEvent: payload.event,
+      });
+    }
   }
 
   private async processChatClosed(payload: ChatClosedDto): Promise<void> {
-    await this.database.transaction(async (manager) => {
-      const customer = await manager
-        .getRepository(Customer)
-        .findOneBy({ id: payload.customerId });
+    const closedConversation = await this.database.transaction(
+      async (manager) => {
+        const customer = await manager
+          .getRepository(Customer)
+          .findOneBy({ id: payload.customerId });
 
-      if (!customer) {
-        console.error(
-          `Unknown customer ${payload.customerId} in ${payload.event}`,
+        if (!customer) {
+          console.error(
+            `Unknown customer ${payload.customerId} in ${payload.event}`,
+          );
+          throw new Error(`Customer ${payload.customerId} does not exist`);
+        }
+
+        await this.upsertAgent(manager, payload.agent);
+        await this.upsertAgent(manager, payload.closedBy.agent);
+        await this.lockCustomer(manager, payload.customerId);
+
+        const conversations = manager.getRepository(Conversation);
+        const openConversation = await this.findOpenConversation(
+          manager,
+          payload.customerId,
         );
-        throw new Error(`Customer ${payload.customerId} does not exist`);
-      }
 
-      await this.upsertAgent(manager, payload.agent);
-      await this.upsertAgent(manager, payload.closedBy.agent);
-      await this.lockCustomer(manager, payload.customerId);
+        if (openConversation) {
+          openConversation.closedAt = payload.eventAt;
+          openConversation.closedByAgentId = payload.closedBy.agent.id;
+          await conversations.save(openConversation);
+          return {
+            conversationId: openConversation.id,
+            customerId: openConversation.customerId,
+            closedByAgentId: payload.closedBy.agent.id,
+          };
+        }
 
-      const conversations = manager.getRepository(Conversation);
-      const openConversation = await this.findOpenConversation(
-        manager,
-        payload.customerId,
-      );
+        const latestConversation = await conversations.findOne({
+          where: { customerId: payload.customerId },
+          order: { openedAt: "DESC", id: "DESC" },
+        });
 
-      if (openConversation) {
-        openConversation.closedAt = payload.eventAt;
-        openConversation.closedByAgentId = payload.closedBy.agent.id;
-        await conversations.save(openConversation);
-        return;
-      }
+        if (
+          latestConversation?.closedAt?.getTime() ===
+            payload.eventAt.getTime() &&
+          latestConversation.closedByAgentId === payload.closedBy.agent.id
+        ) {
+          return null;
+        }
 
-      const latestConversation = await conversations.findOne({
-        where: { customerId: payload.customerId },
-        order: { openedAt: "DESC", id: "DESC" },
-      });
+        console.warn(
+          `Close event for untracked conversation: customer ${payload.customerId}`,
+        );
+        return null;
+      },
+    );
 
-      if (
-        latestConversation?.closedAt?.getTime() === payload.eventAt.getTime() &&
-        latestConversation.closedByAgentId === payload.closedBy.agent.id
-      ) {
-        return;
-      }
-
-      console.warn(
-        `Close event for untracked conversation: customer ${payload.customerId}`,
-      );
-    });
+    if (closedConversation) {
+      this.postHogService.captureConversationClosed(closedConversation);
+    }
   }
 
   private async upsertCustomer(
@@ -301,8 +358,11 @@ export class WebhookService {
     conversationId: number | null,
     senderAgentId: string | null,
     direction: MessageDirection,
-  ): Promise<void> {
-    await manager.getRepository(Message).upsert(
+  ): Promise<MessageEventParams> {
+    const messages = manager.getRepository(Message);
+    const text = payload.text?.trim();
+
+    await messages.upsert(
       {
         id: payload.id,
         customerId: payload.customer.id,
@@ -311,7 +371,7 @@ export class WebhookService {
         direction,
         platform: payload.platform.trim().toLowerCase(),
         type: payload.type,
-        text: payload.text?.trim() || null,
+        text: text || null,
         fileUrl: payload.fileUrl?.trim() || null,
         fileCaption: payload.fileCaption?.trim() || null,
         deliveryStatus: payload.deliveryStatus,
@@ -319,5 +379,15 @@ export class WebhookService {
       },
       ["id"],
     );
+
+    return {
+      messageId: payload.id,
+      customerId: payload.customer.id,
+      conversationId,
+      senderAgentId,
+      direction,
+      text: text ?? "",
+      platformTimestamp: payload.platformTimestamp,
+    };
   }
 }

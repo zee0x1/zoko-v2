@@ -18,4 +18,8 @@ export const config = {
     baseUrl: "https://chat.zoko.io/v2",
     requestDelayMs: 3000,
   },
+  posthog: {
+    projectToken: process.env.POSTHOG_PROJECT_TOKEN,
+    host: process.env.POSTHOG_HOST,
+  },
 } as const;

@@ -4,11 +4,16 @@ import { Message, MessageDirection } from "../entities/message.entity.js";
 import { Customer } from "../entities/customer.entity.js";
 import { ZokoClient } from "../zoko-client.js";
 import { SyncCheckpoint } from "../entities/sync-checkpoint.entity.js";
+import {
+  PostHogService,
+  type MessageEventParams,
+} from "./posthog.service.js";
 
 export class SyncService {
   constructor(
     private readonly database: DataSource,
     private readonly zokoClient: ZokoClient,
+    private readonly postHogService: PostHogService,
   ) {}
 
   async syncAgents(): Promise<{ synced: number }> {
@@ -116,43 +121,61 @@ export class SyncService {
 
       const messages = await this.zokoClient.listCustomerMessages(customer.id);
 
-      messagesSynced += await this.database.transaction(async (manager) => {
-        let synced = 0;
+      const transactionResult = await this.database.transaction(
+        async (manager) => {
+          let synced = 0;
+          const messageEvents: MessageEventParams[] = [];
 
-        for (const message of messages) {
-          if (
-            message.direction !== MessageDirection.FromCustomer &&
-            message.direction !== MessageDirection.FromStore
-          ) {
-            continue;
+          for (const message of messages) {
+            if (
+              message.direction !== MessageDirection.FromCustomer &&
+              message.direction !== MessageDirection.FromStore
+            ) {
+              continue;
+            }
+
+            const record = {
+              id: message.key.msgId,
+              customerId: message.key.customerId,
+              conversationId: null,
+              senderAgentId: null,
+              direction: message.direction,
+              platform: message.platform.trim().toLowerCase(),
+              type: message.type,
+              text: message.text?.trim() || null,
+              fileUrl: message.fileUrl?.trim() || null,
+              fileCaption: message.fileCaption?.trim() || null,
+              deliveryStatus: message.deliveryStatus?.trim() || "unknown",
+              platformTimestamp: new Date(message.platformTimestamp),
+            };
+
+            await manager.getRepository(Message).save(record);
+
+            messageEvents.push({
+              messageId: record.id,
+              customerId: record.customerId,
+              conversationId: record.conversationId,
+              senderAgentId: record.senderAgentId,
+              direction: record.direction,
+              text: record.text ?? "",
+              platformTimestamp: record.platformTimestamp,
+            });
+            synced += 1;
           }
 
-          const record = {
-            id: message.key.msgId,
-            customerId: message.key.customerId,
-            conversationId: null,
-            senderAgentId: null,
-            direction: message.direction,
-            platform: message.platform.trim().toLowerCase(),
-            type: message.type,
-            text: message.text?.trim() || null,
-            fileUrl: message.fileUrl?.trim() || null,
-            fileCaption: message.fileCaption?.trim() || null,
-            deliveryStatus: message.deliveryStatus?.trim() || "unknown",
-            platformTimestamp: new Date(message.platformTimestamp),
-          };
+          await manager
+            .getRepository(Customer)
+            .update({ id: customer.id }, { messageHistorySyncedAt: new Date() });
 
-          await manager.getRepository(Message).save(record);
+          return { synced, messageEvents };
+        },
+      );
 
-          synced += 1;
-        }
+      messagesSynced += transactionResult.synced;
 
-        await manager
-          .getRepository(Customer)
-          .update({ id: customer.id }, { messageHistorySyncedAt: new Date() });
-
-        return synced;
-      });
+      for (const messageEvent of transactionResult.messageEvents) {
+        this.postHogService.captureMessages(messageEvent);
+      }
     }
 
     return {

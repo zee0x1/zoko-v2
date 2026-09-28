@@ -1,6 +1,7 @@
 import { app, syncService } from "./app.js";
 import { database } from "./database.js";
 import { startSyncJob } from "./jobs/sync.job.js";
+import { posthogClient } from "./posthog.js";
 
 async function startServer(): Promise<void> {
   try {
@@ -25,8 +26,14 @@ async function startServer(): Promise<void> {
     console.info("Shutting down server...");
     syncTask.stop();
     server.close(async () => {
-      await database.destroy();
-      console.info("Server shut down.");
+      try {
+        await posthogClient.shutdown();
+      } catch (error) {
+        console.error("Unable to shut down the PostHog client cleanly.", error);
+      } finally {
+        await database.destroy();
+        console.info("Server shut down.");
+      }
     });
   }
 

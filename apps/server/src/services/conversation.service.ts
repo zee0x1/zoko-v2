@@ -4,6 +4,7 @@ import { ChatAssignment } from "../entities/chat-assignment.entity.js";
 import { Conversation } from "../entities/conversation.entity.js";
 import { Message } from "../entities/message.entity.js";
 import { ZokoClient } from "../zoko-client.js";
+import { PostHogService } from "./posthog.service.js";
 
 export class ConversationNotFoundError extends Error {
   constructor(conversationId: number) {
@@ -30,6 +31,13 @@ export class RecipientConfigurationError extends Error {
   constructor() {
     super("ZOKO_ALLOWED_RECIPIENT_PHONE is required for sending messages");
     this.name = "RecipientConfigurationError";
+  }
+}
+
+export class ConversationNotClosedError extends Error {
+  constructor() {
+    super("Conversation is still open");
+    this.name = "ConversationNotClosedError";
   }
 }
 
@@ -75,6 +83,7 @@ export class ConversationService {
     private readonly database: DataSource,
     private readonly zokoClient: ZokoClient,
     private readonly allowedRecipientPhone: string | undefined,
+    private readonly postHogService: PostHogService,
   ) {}
 
   async listConversations(): Promise<{
@@ -185,6 +194,52 @@ export class ConversationService {
     }
 
     return this.zokoClient.sendTextMessage(this.allowedRecipientPhone, text);
+  }
+
+  async askForCsat(
+    conversationId: number,
+  ): Promise<{ status: "accepted" }> {
+    const conversation = await this.getClosedConversation(conversationId);
+
+    this.postHogService.captureCsatAsked({
+      conversationId: conversation.id,
+      customerId: conversation.customerId,
+    });
+
+    return { status: "accepted" };
+  }
+
+  async submitCsatResponse(
+    conversationId: number,
+    rating: number,
+  ): Promise<{ status: "accepted" }> {
+    const conversation = await this.getClosedConversation(conversationId);
+
+    this.postHogService.captureCsatReceived({
+      conversationId: conversation.id,
+      customerId: conversation.customerId,
+      rating,
+    });
+
+    return { status: "accepted" };
+  }
+
+  private async getClosedConversation(
+    conversationId: number,
+  ): Promise<Conversation> {
+    const conversation = await this.database
+      .getRepository(Conversation)
+      .findOneBy({ id: conversationId });
+
+    if (!conversation) {
+      throw new ConversationNotFoundError(conversationId);
+    }
+
+    if (conversation.closedAt === null) {
+      throw new ConversationNotClosedError();
+    }
+
+    return conversation;
   }
 
   private toConversationResponse(
