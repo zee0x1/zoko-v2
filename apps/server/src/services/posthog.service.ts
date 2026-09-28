@@ -16,6 +16,14 @@ export type MessageEventParams = {
   platformTimestamp: Date;
 };
 
+export type AgentGroupParams = {
+  agentId: string;
+  name: string;
+  email: string;
+  messagesSent: number;
+  conversationsHandled: number;
+};
+
 interface ConversationOpenedParams extends ConversationEventParams {
   sourceEvent: "message:user:in" | "zoko:chat:assigned";
 }
@@ -58,6 +66,10 @@ export class PostHogService {
 
   captureMessages(params: MessageEventParams): void {
     this.captureMessageEvent("message_event", params);
+  }
+
+  captureAgentMetrics(params: AgentGroupParams): void {
+    this.captureAgentGroupEvent("agent_metrics_updated", params);
   }
 
   private captureConversationEvent(
@@ -105,6 +117,47 @@ export class PostHogService {
     } catch (error) {
       console.error(
         `Failed to emit PostHog event ${event} for message ${params.messageId}`,
+        error,
+      );
+    }
+  }
+
+  private captureAgentGroupEvent(
+    event: string,
+    params: AgentGroupParams,
+  ): void {
+    try {
+      const distinctId = `agent:${params.agentId}`;
+
+      this.client.groupIdentify({
+        groupType: "agent",
+        groupKey: params.agentId,
+        distinctId,
+        properties: {
+          name: params.name,
+          email: params.email,
+          messagesSent: params.messagesSent,
+          conversationsHandled: params.conversationsHandled,
+        },
+      });
+
+      this.client.capture({
+        distinctId,
+        event,
+        groups: {
+          agent: params.agentId,
+        },
+        properties: {
+          agentId: params.agentId,
+        },
+      });
+
+      console.info(
+        `PostHog agent group updated for agent ${params.agentId}`,
+      );
+    } catch (error) {
+      console.error(
+        `Failed to update PostHog agent group for agent ${params.agentId}`,
         error,
       );
     }

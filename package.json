@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "posthog:sync-messages": "pnpm --filter @zoko/server posthog:sync-messages",
+    "posthog:sync-agent-groups": "pnpm --filter @zoko/server posthog:sync-agent-groups",
     "db:up": "docker compose --env-file apps/server/.env up -d",
     "db:down": "docker compose --env-file apps/server/.env down"
   }

@@ -4,16 +4,15 @@ import { Message, MessageDirection } from "../entities/message.entity.js";
 import { Customer } from "../entities/customer.entity.js";
 import { ZokoClient } from "../zoko-client.js";
 import { SyncCheckpoint } from "../entities/sync-checkpoint.entity.js";
-import {
-  PostHogService,
-  type MessageEventParams,
-} from "./posthog.service.js";
+import { PostHogService, type MessageEventParams } from "./posthog.service.js";
+import { AgentGroupService } from "./agent-group.service.js";
 
 export class SyncService {
   constructor(
     private readonly database: DataSource,
     private readonly zokoClient: ZokoClient,
     private readonly postHogService: PostHogService,
+    private readonly agentGroupService: AgentGroupService,
   ) {}
 
   async syncAgents(): Promise<{ synced: number }> {
@@ -165,7 +164,10 @@ export class SyncService {
 
           await manager
             .getRepository(Customer)
-            .update({ id: customer.id }, { messageHistorySyncedAt: new Date() });
+            .update(
+              { id: customer.id },
+              { messageHistorySyncedAt: new Date() },
+            );
 
           return { synced, messageEvents };
         },

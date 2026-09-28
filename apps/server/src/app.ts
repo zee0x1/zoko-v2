@@ -6,6 +6,7 @@ import { WebhookController } from "./controllers/webhook.controller.js";
 import { config } from "./config.js";
 import { database } from "./database.js";
 import { ConversationService } from "./services/conversation.service.js";
+import { AgentGroupService } from "./services/agent-group.service.js";
 import { MetricsService } from "./services/metrics.service.js";
 import { PostHogService } from "./services/posthog.service.js";
 import { SyncService } from "./services/sync.service.js";
@@ -24,6 +25,7 @@ const zokoClient = new ZokoClient(
   config.zoko.requestDelayMs,
 );
 const postHogService = new PostHogService(posthogClient);
+const agentGroupService = new AgentGroupService(database, postHogService);
 
 export const syncService = new SyncService(
   database,
@@ -41,7 +43,7 @@ const conversationController = new ConversationController(
 );
 const metricsController = new MetricsController(new MetricsService(database));
 const webhookController = new WebhookController(
-  new WebhookService(database, postHogService),
+  new WebhookService(database, postHogService, agentGroupService),
 );
 
 app.get("/health", (_request, response) => {

@@ -1,4 +1,3 @@
-import "reflect-metadata";
 import { database } from "../database.js";
 import { Message } from "../entities/message.entity.js";
 import { posthogClient } from "../posthog.js";

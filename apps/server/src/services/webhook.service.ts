@@ -12,6 +12,7 @@ import { ChatAssignment } from "../entities/chat-assignment.entity.js";
 import { Conversation } from "../entities/conversation.entity.js";
 import { Customer } from "../entities/customer.entity.js";
 import { Message, MessageDirection } from "../entities/message.entity.js";
+import { AgentGroupService } from "./agent-group.service.js";
 import { PostHogService, type MessageEventParams } from "./posthog.service.js";
 
 type WebhookAgent = {
@@ -24,6 +25,7 @@ export class WebhookService {
   constructor(
     private readonly database: DataSource,
     private readonly postHogService: PostHogService,
+    private readonly agentGroupService: AgentGroupService,
   ) {}
 
   process(payload: WebhookDto): Promise<void> {
@@ -144,6 +146,10 @@ export class WebhookService {
     });
 
     this.postHogService.captureMessages(createdMessage);
+
+    if (createdMessage.senderAgentId) {
+      await this.syncAgentGroup(createdMessage.senderAgentId);
+    }
   }
 
   private async processDeliveryUpdate(
@@ -231,6 +237,8 @@ export class WebhookService {
         sourceEvent: payload.event,
       });
     }
+
+    await this.syncAgentGroup(payload.agent.id);
   }
 
   private async processChatClosed(payload: ChatClosedDto): Promise<void> {
@@ -311,6 +319,17 @@ export class WebhookService {
       },
       ["id"],
     );
+  }
+
+  private async syncAgentGroup(agentId: string): Promise<void> {
+    try {
+      await this.agentGroupService.syncAgent(agentId);
+    } catch (error) {
+      console.error(
+        `Failed to synchronize PostHog metrics for agent ${agentId}`,
+        error,
+      );
+    }
   }
 
   private async upsertAgent(
