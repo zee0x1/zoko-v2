@@ -154,11 +154,17 @@ Average is the arithmetic mean. Median is the middle sorted value, or the averag
 
 #### Support overview
 
-> Screenshot placeholder - to be added.
+![Support overview dashboard](screenshots/support-overview-dashboard.png)
+
+![Agent performance table](screenshots/support-overview-agent-table.png)
+
+![Agent performance details](screenshots/support-overview-agent-details.png)
 
 #### Conversation workspace
 
-> Screenshot placeholder - to be added.
+![Open conversation workspace](screenshots/conversation-workspace-open.png)
+
+![Closed conversation workspace](screenshots/conversation-workspace-closed.png)
 
 ## Task 2 - PostHog Analytics
 
