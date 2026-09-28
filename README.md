@@ -119,18 +119,18 @@ Sending is restricted to `ZOKO_ALLOWED_RECIPIENT_PHONE`. The server rejects ever
 
 ### Metric definitions
 
-| Metric | Calculation |
-| --- | --- |
-| Total messages | Count of all rows in `messages`. |
-| Messages per customer | Message count grouped by `customer_id`. |
-| Human FRT | Time from the first customer message in a conversation to the first subsequent store message with a non-null `sender_agent_id`. |
-| Bot FRT | Time from the first customer message in a conversation to the first subsequent store message with a null `sender_agent_id`. |
-| Resolution time | `closed_at - opened_at` for closed conversations. |
-| Conversations handled | Distinct conversations assigned to an agent. |
-| Agent FRT | Human FRT attributed to the agent who sent the first human response. |
-| Agent resolution time | Resolution time attributed to the agent who closed the conversation. |
-| Reassigned chats | Distinct conversations subsequently assigned away from an agent. |
-| Reassignment rate | `reassigned chats / conversations handled`. This is the additional metric beyond the take-home requirements. |
+| Metric                | Calculation                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Total messages        | Count of all rows in `messages`.                                                                                                |
+| Messages per customer | Message count grouped by `customer_id`.                                                                                         |
+| Human FRT             | Time from the first customer message in a conversation to the first subsequent store message with a non-null `sender_agent_id`. |
+| Bot FRT               | Time from the first customer message in a conversation to the first subsequent store message with a null `sender_agent_id`.     |
+| Resolution time       | `closed_at - opened_at` for closed conversations.                                                                               |
+| Conversations handled | Distinct conversations assigned to an agent.                                                                                    |
+| Agent FRT             | Human FRT attributed to the agent who sent the first human response.                                                            |
+| Agent resolution time | Resolution time attributed to the agent who closed the conversation.                                                            |
+| Reassigned chats      | Distinct conversations subsequently assigned away from an agent.                                                                |
+| Reassignment rate     | `reassigned chats / conversations handled`. This is the additional metric beyond the take-home requirements.                    |
 
 Average is the arithmetic mean. Median is the middle sorted value, or the average of the two middle values for an even sample size.
 
@@ -166,14 +166,14 @@ PostHog is integrated on the server with `posthog-node`. A single client instanc
 
 ### Captured events
 
-| Event | Trigger and identity |
-| --- | --- |
-| `conversation_opened` | A new conversation is persisted. Uses `conversation:<id>` as its PostHog distinct ID. |
-| `conversation_closed` | An open conversation becomes closed. Uses the same conversation distinct ID. |
-| `csat_asked` | `POST /api/conversations/:conversationId/csat/ask` is called for a closed conversation. |
-| `csat_received` | `POST /api/conversations/:conversationId/csat/response` is called with a rating from 1 to 5. |
-| `message_event` | A live or historically synchronized message is ingested. The original platform timestamp is preserved. |
-| `agent_metrics_updated` | An agent's aggregate metrics are refreshed and linked to the PostHog `agent` group. |
+| Event                   | Trigger and identity                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `conversation_opened`   | A new conversation is persisted. Uses `conversation:<id>` as its PostHog distinct ID.                  |
+| `conversation_closed`   | An open conversation becomes closed. Uses the same conversation distinct ID.                           |
+| `csat_asked`            | `POST /api/conversations/:conversationId/csat/ask` is called for a closed conversation.                |
+| `csat_received`         | `POST /api/conversations/:conversationId/csat/response` is called with a rating from 1 to 5.           |
+| `message_event`         | A live or historically synchronized message is ingested. The original platform timestamp is preserved. |
+| `agent_metrics_updated` | An agent's aggregate metrics are refreshed and linked to the PostHog `agent` group.                    |
 
 The initial CSAT design used `zoko:chat:closed` to invoke a FlowHippo webhook trigger, start a Zoko flow, send a WhatsApp CSAT template, and capture the customer's reply. During implementation, FlowHippo did not provide a dedicated CSAT collection step, the available templates and flow configuration were unreliable for this use case, and creating a suitable WhatsApp template required external approval that could take several business days. Given the take-home timeline, the production delivery flow was not pursued further.
 
@@ -221,7 +221,8 @@ The improvements below are ordered by expected product and business impact.
 
 ### 3. Consistent, versioned webhook contracts
 
-- **What:** Provide versioned, type-specific schemas, published JSON/OpenAPI definitions, examples, and webhook replay tooling. Use explicit media fields instead of changing the meaning of `text` by message type.
+- **What:** Use clear, consistent fields for text, media URLs, and captions across message types. Right now, I came across some inconsistencies in the webhook payloads for different type
+  pf messages.
 - **Why:** In the observed text webhook, `text` contains the message body. In the image webhook, `text` contains the media URL while the human-written text moves to `fileCaption`, and `fileUrl` duplicates the URL. Consumers must infer undocumented semantics from `type`.
 - **Expected impact:** Faster integrations, fewer ingestion bugs and support tickets, and greater developer trust.
 
@@ -291,7 +292,7 @@ The improvements below are ordered by expected product and business impact.
 
 ### 4. Official Zoko MCP server
 
-- **What:** Expose authenticated Zoko resources and tools to compatible AI clients. Start read-only, then add scoped and auditable actions such as drafting messages or flows.
+- **What:** Expose authenticated Zoko resources and tools to compatible AI agents. Start read-only, then add scoped and auditable actions such as drafting messages or flows.
 - **Why:** This gives merchants, agencies, and developers access to Zoko data and actions from the AI tools they already use, without bespoke integrations.
 - **Expected impact:** Lower integration friction, higher API and automation usage, new ecosystem distribution, and AI-native differentiation.
 
