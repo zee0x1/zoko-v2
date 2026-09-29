@@ -12,7 +12,6 @@ export class SyncService {
     private readonly database: DataSource,
     private readonly zokoClient: ZokoClient,
     private readonly postHogService: PostHogService,
-    private readonly agentGroupService: AgentGroupService,
   ) {}
 
   async syncAgents(): Promise<{ synced: number }> {
